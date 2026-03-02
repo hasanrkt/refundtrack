@@ -189,7 +189,7 @@ export default function App() {
 
     const formData = new FormData(e.currentTarget);
     const orderData = {
-      id: editingOrder?.id ?? crypto.randomUUID(),
+      id: formData.get("id") as string,
       platform: formData.get("platform") as Platform,
       deal_source: formData.get("deal_source") as string,
       order_date: formData.get("order_date") as string,
@@ -471,6 +471,7 @@ export default function App() {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-gray-50/50 border-bottom border-black/5">
+                      <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Order ID</th>
                       <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Platform</th>
                       <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
                       <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Account</th>
@@ -486,6 +487,9 @@ export default function App() {
                   <tbody className="divide-y divide-black/5">
                     {filteredOrders.map((order) => (
                       <tr key={order.id} className="hover:bg-gray-50/50 transition-colors group">
+                        <td className="px-6 py-4">
+                          <span className="font-mono text-xs font-medium">{order.id}</span>
+                        </td>
                         <td className="px-6 py-4">
                           <div className="flex flex-col">
                             <span className="text-sm font-medium">{order.platform}</span>
@@ -600,6 +604,7 @@ export default function App() {
                 <div key={order.id} className="bg-white p-4 rounded-2xl border border-black/5 shadow-sm space-y-4">
                   <div className="flex justify-between items-start">
                     <div>
+                      <span className="font-mono text-[10px] text-gray-400 uppercase tracking-wider">{order.id}</span>
                       <div className="flex items-center gap-2">
                         <h4 className="font-bold text-lg leading-tight">{order.account_name}</h4>
                         {order.deal_source && order.deal_source !== 'Direct' && (
@@ -743,6 +748,16 @@ export default function App() {
                   </motion.div>
                 )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
+                  <div className="space-y-2">
+                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Order ID</label>
+                    <input 
+                      name="id"
+                      required
+                      defaultValue={editingOrder?.id}
+                      className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-black/5 transition-all"
+                      placeholder="e.g. AMZ-12345"
+                    />
+                  </div>
                   <div className="space-y-2">
                     <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Platform</label>
                     <select 
