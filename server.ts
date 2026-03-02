@@ -22,7 +22,9 @@ db.exec(`
     refund_amount REAL DEFAULT 0,
     mediator_name TEXT,
     refund_form_status TEXT NOT NULL,
+    refund_form_date TEXT,
     refund_status TEXT NOT NULL,
+    refund_date TEXT,
     notes TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )
@@ -34,6 +36,13 @@ try {
 } catch (e) {}
 try {
   db.prepare("ALTER TABLE orders ADD COLUMN deal_source TEXT DEFAULT 'Direct'").run();
+} catch (e) {}
+try {
+  db.prepare("ALTER TABLE orders ADD COLUMN refund_form_date TEXT").run();
+} catch (e) {}
+
+try {
+  db.prepare("ALTER TABLE orders ADD COLUMN refund_date TEXT").run();
 } catch (e) {}
 
 async function startServer() {
@@ -64,7 +73,9 @@ async function startServer() {
       refund_amount,
       mediator_name,
       refund_form_status,
+      refund_form_date,
       refund_status,
+      refund_date,
       notes,
     } = req.body;
 
@@ -75,8 +86,8 @@ async function startServer() {
 
     try {
       const stmt = db.prepare(`
-        INSERT INTO orders (id, platform, deal_source, order_date, account_name, order_amount, less_amount, refund_amount, mediator_name, refund_form_status, refund_status, notes)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        INSERT INTO orders (id, platform, deal_source, order_date, account_name, order_amount, less_amount, refund_amount, mediator_name, refund_form_status, refund_form_date, refund_status, refund_date, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       `);
       stmt.run(
         id, 
@@ -88,8 +99,10 @@ async function startServer() {
         less_amount || 0,
         refund_amount || 0, 
         mediator_name || null, 
-        refund_form_status, 
+        refund_form_status || 'Pending',
+        refund_form_date || null,
         refund_status, 
+        refund_date || null,
         notes || null
       );
       res.status(201).json({ success: true });
@@ -115,7 +128,9 @@ async function startServer() {
       refund_amount,
       mediator_name,
       refund_form_status,
+      refund_form_date,
       refund_status,
+      refund_date,
       notes,
     } = req.body;
 
@@ -132,7 +147,9 @@ async function startServer() {
           refund_amount = ?,
           mediator_name = ?,
           refund_form_status = ?,
+          refund_form_date = ?,
           refund_status = ?,
+          refund_date = ?,
           notes = ?
         WHERE id = ?
       `);
@@ -147,7 +164,9 @@ async function startServer() {
         refund_amount || 0, 
         mediator_name || null, 
         refund_form_status, 
+        refund_form_date || null,
         refund_status, 
+        refund_date || null,
         notes || null,
         oldId
       );
@@ -155,6 +174,40 @@ async function startServer() {
     } catch (error: any) {
       console.error("Database Error (PUT):", error);
       res.status(500).json({ error: "Failed to update order: " + error.message });
+    }
+  });
+
+  app.patch("/api/orders/:id/toggle-form", (req, res) => {
+    const { id } = req.params;
+    const { status, date } = req.body;
+    try {
+      const stmt = db.prepare(`
+        UPDATE orders SET 
+          refund_form_status = ?,
+          refund_form_date = ?
+        WHERE id = ?
+      `);
+      stmt.run(status, date || null, id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: "Failed to toggle form status: " + error.message });
+    }
+  });
+
+  app.patch("/api/orders/:id/toggle-refund", (req, res) => {
+    const { id } = req.params;
+    const { status, date } = req.body;
+    try {
+      const stmt = db.prepare(`
+        UPDATE orders SET 
+          refund_status = ?,
+          refund_date = ?
+        WHERE id = ?
+      `);
+      stmt.run(status, date || null, id);
+      res.json({ success: true });
+    } catch (error: any) {
+      res.status(500).json({ error: "Failed to toggle refund status: " + error.message });
     }
   });
 

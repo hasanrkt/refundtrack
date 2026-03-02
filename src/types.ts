@@ -13,7 +13,9 @@ export interface Order {
   refund_amount: number;
   mediator_name?: string;
   refund_form_status: RefundFormStatus;
+  refund_form_date?: string;
   refund_status: RefundStatus;
+  refund_date?: string;
   notes?: string;
   created_at?: string;
 }

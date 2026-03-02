@@ -42,6 +42,7 @@ function cn(...inputs: ClassValue[]) {
 
 const PLATFORMS: Platform[] = ["Amazon", "Flipkart", "Myntra", "Meesho", "Other"];
 const DEAL_SOURCES = ["Direct", "Telegram", "WhatsApp"];
+const MEDIATORS = ["NJ", "KAKA", "Other"];
 const REFUND_FORM_STATUSES: RefundFormStatus[] = ["Pending", "Submitted"];
 const REFUND_STATUSES: RefundStatus[] = ["Not Started", "Processing", "Refunded"];
 
@@ -60,6 +61,8 @@ export default function App() {
   const [dateRange, setDateRange] = useState<{ start: string; end: string }>({ start: "", end: "" });
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [selectedMediator, setSelectedMediator] = useState<string>("NJ");
+  const [customMediator, setCustomMediator] = useState<string>("");
   const [formValues, setFormValues] = useState({
     order_amount: 0,
     less_amount: 0,
@@ -148,12 +151,25 @@ export default function App() {
         less_amount: editingOrder.less_amount || 0,
         refund_amount: editingOrder.refund_amount
       });
+      
+      if (editingOrder.mediator_name === "NJ" || editingOrder.mediator_name === "KAKA") {
+        setSelectedMediator(editingOrder.mediator_name);
+        setCustomMediator("");
+      } else if (editingOrder.mediator_name) {
+        setSelectedMediator("Other");
+        setCustomMediator(editingOrder.mediator_name);
+      } else {
+        setSelectedMediator("NJ");
+        setCustomMediator("");
+      }
     } else if (isModalOpen) {
       setFormValues({
         order_amount: 0,
         less_amount: 0,
         refund_amount: 0
       });
+      setSelectedMediator("NJ");
+      setCustomMediator("");
     }
   }, [isModalOpen, editingOrder]);
 
@@ -173,7 +189,7 @@ export default function App() {
 
     const formData = new FormData(e.currentTarget);
     const orderData = {
-      id: formData.get("id") as string,
+      id: editingOrder?.id ?? crypto.randomUUID(),
       platform: formData.get("platform") as Platform,
       deal_source: formData.get("deal_source") as string,
       order_date: formData.get("order_date") as string,
@@ -181,9 +197,10 @@ export default function App() {
       order_amount: formValues.order_amount,
       less_amount: formValues.less_amount,
       refund_amount: formValues.refund_amount,
-      mediator_name: formData.get("mediator_name") as string,
-      refund_form_status: formData.get("refund_form_status") as RefundFormStatus,
-      refund_status: formData.get("refund_status") as RefundStatus,
+      mediator_name: selectedMediator === "Other" ? customMediator : selectedMediator,
+      refund_form_status: editingOrder?.refund_form_status ?? "Pending",
+      refund_form_date: editingOrder?.refund_form_date,
+      refund_status: editingOrder?.refund_status ?? "Not Started",
       notes: formData.get("notes") as string,
     };
 
@@ -217,6 +234,42 @@ export default function App() {
       setFormError("A network error occurred. Please check your connection.");
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleToggleFormStatus = async (order: Order) => {
+    const newStatus = order.refund_form_status === "Pending" ? "Submitted" : "Pending";
+    const newDate = newStatus === "Submitted" ? format(new Date(), "yyyy-MM-dd HH:mm") : null;
+    
+    try {
+      const response = await fetch(`/api/orders/${order.id}/toggle-form`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus, date: newDate }),
+      });
+      if (response.ok) fetchOrders();
+    } catch (error) {
+      console.error("Error toggling form status:", error);
+    }
+  };
+
+  const handleToggleRefundStatus = async (order: Order) => {
+    let nextStatus: RefundStatus;
+    if (order.refund_status === "Not Started") nextStatus = "Processing";
+    else if (order.refund_status === "Processing") nextStatus = "Refunded";
+    else nextStatus = "Not Started";
+
+    const nextDate = nextStatus === "Refunded" ? format(new Date(), "yyyy-MM-dd HH:mm") : null;
+
+    try {
+      const response = await fetch(`/api/orders/${order.id}/toggle-refund`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: nextStatus, date: nextDate }),
+      });
+      if (response.ok) fetchOrders();
+    } catch (error) {
+      console.error("Error toggling refund status:", error);
     }
   };
 
@@ -418,24 +471,21 @@ export default function App() {
                 <table className="w-full text-left border-collapse">
                   <thead>
                     <tr className="bg-gray-50/50 border-bottom border-black/5">
-                      <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Order ID</th>
                       <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Platform</th>
                       <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
                       <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Account</th>
                       <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Mediator</th>
                       <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Amount</th>
                       <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Less</th>
+                      <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Refund Amount</th>
                       <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Refund</th>
-                      <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
+                      <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider">Refund Form</th>
                       <th className="px-6 py-4 text-xs font-semibold text-gray-500 uppercase tracking-wider text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-black/5">
                     {filteredOrders.map((order) => (
                       <tr key={order.id} className="hover:bg-gray-50/50 transition-colors group">
-                        <td className="px-6 py-4">
-                          <span className="font-mono text-xs font-medium">{order.id}</span>
-                        </td>
                         <td className="px-6 py-4">
                           <div className="flex flex-col">
                             <span className="text-sm font-medium">{order.platform}</span>
@@ -469,8 +519,41 @@ export default function App() {
                         </td>
                         <td className="px-6 py-4">
                           <div className="flex flex-col gap-1">
-                            <StatusBadge status={order.refund_status} />
-                            <span className="text-[10px] text-gray-400 uppercase tracking-tighter">Form: {order.refund_form_status}</span>
+                            <button 
+                              onClick={() => handleToggleRefundStatus(order)}
+                              className="hover:opacity-80 transition-opacity"
+                            >
+                              <StatusBadge status={order.refund_status} />
+                            </button>
+                            {order.refund_date && (
+                              <span className="text-[9px] text-gray-400 text-center font-medium">
+                                {order.refund_date}
+                              </span>
+                            )}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex flex-col gap-1">
+                            <button
+                              onClick={() => handleToggleFormStatus(order)}
+                              className={cn(
+                                "px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border transition-all flex items-center justify-center gap-1.5",
+                                order.refund_form_status === "Submitted" 
+                                  ? "bg-emerald-50 text-emerald-600 border-emerald-200" 
+                                  : "bg-red-50 text-red-600 border-red-200"
+                              )}
+                            >
+                              <div className={cn(
+                                "w-1.5 h-1.5 rounded-full",
+                                order.refund_form_status === "Submitted" ? "bg-emerald-500" : "bg-red-500"
+                              )} />
+                              {order.refund_form_status}
+                            </button>
+                            {order.refund_form_date && (
+                              <span className="text-[9px] text-gray-400 text-center font-medium">
+                                {order.refund_form_date}
+                              </span>
+                            )}
                           </div>
                         </td>
                         <td className="px-6 py-4 text-right">
@@ -517,7 +600,6 @@ export default function App() {
                 <div key={order.id} className="bg-white p-4 rounded-2xl border border-black/5 shadow-sm space-y-4">
                   <div className="flex justify-between items-start">
                     <div>
-                      <span className="font-mono text-[10px] text-gray-400 uppercase tracking-wider">{order.id}</span>
                       <div className="flex items-center gap-2">
                         <h4 className="font-bold text-lg leading-tight">{order.account_name}</h4>
                         {order.deal_source && order.deal_source !== 'Direct' && (
@@ -529,7 +611,6 @@ export default function App() {
                         <p className="text-[10px] text-indigo-500 font-semibold uppercase mt-1">Mediator: {order.mediator_name}</p>
                       )}
                     </div>
-                    <StatusBadge status={order.refund_status} />
                   </div>
                   
                   <div className="grid grid-cols-3 gap-2 py-3 border-y border-black/5">
@@ -542,13 +623,48 @@ export default function App() {
                       <p className="font-bold text-sm text-gray-500">₹{(order.less_amount || 0).toFixed(0)}</p>
                     </div>
                     <div>
-                      <p className="text-[10px] text-gray-400 uppercase font-semibold">Refund</p>
+                      <p className="text-[10px] text-gray-400 uppercase font-semibold">Refund Amount</p>
                       <p className="font-bold text-sm text-emerald-600">₹{order.refund_amount.toFixed(0)}</p>
                     </div>
                   </div>
 
                   <div className="flex justify-between items-center pt-2">
-                    <span className="text-[10px] text-gray-400 uppercase tracking-tighter font-medium">Form: {order.refund_form_status}</span>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[9px] text-gray-400 uppercase font-bold tracking-wider">Refund Status</span>
+                      <button 
+                        onClick={() => handleToggleRefundStatus(order)}
+                        className="hover:opacity-80 transition-opacity"
+                      >
+                        <StatusBadge status={order.refund_status} />
+                      </button>
+                      {order.refund_date && (
+                        <span className="text-[9px] text-gray-400 font-medium">
+                          {order.refund_date}
+                        </span>
+                      )}
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <button
+                        onClick={() => handleToggleFormStatus(order)}
+                        className={cn(
+                          "px-3 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider border transition-all flex items-center gap-1.5",
+                          order.refund_form_status === "Submitted" 
+                            ? "bg-emerald-50 text-emerald-600 border-emerald-200" 
+                            : "bg-red-50 text-red-600 border-red-200"
+                        )}
+                      >
+                        <div className={cn(
+                          "w-1.5 h-1.5 rounded-full",
+                          order.refund_form_status === "Submitted" ? "bg-emerald-500" : "bg-red-500"
+                        )} />
+                        Refund Form: {order.refund_form_status}
+                      </button>
+                      {order.refund_form_date && (
+                        <span className="text-[9px] text-gray-400 font-medium">
+                          Filled: {order.refund_form_date}
+                        </span>
+                      )}
+                    </div>
                     <div className="flex gap-2">
                       <button 
                         onClick={() => {
@@ -628,16 +744,6 @@ export default function App() {
                 )}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 sm:gap-6">
                   <div className="space-y-2">
-                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Order ID</label>
-                    <input 
-                      name="id"
-                      required
-                      defaultValue={editingOrder?.id}
-                      className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-black/5 transition-all"
-                      placeholder="e.g. AMZ-12345"
-                    />
-                  </div>
-                  <div className="space-y-2">
                     <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Platform</label>
                     <select 
                       name="platform"
@@ -711,34 +817,24 @@ export default function App() {
                   </div>
                   <div className="space-y-2">
                     <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Mediator Name</label>
-                    <input 
-                      name="mediator_name"
-                      defaultValue={editingOrder?.mediator_name}
-                      className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-black/5 transition-all"
-                      placeholder="Optional"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Refund Form Status</label>
-                    <select 
-                      name="refund_form_status"
-                      required
-                      defaultValue={editingOrder?.refund_form_status ?? "Pending"}
-                      className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-black/5 transition-all"
-                    >
-                      {REFUND_FORM_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
-                  </div>
-                  <div className="space-y-2">
-                    <label className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Refund Status</label>
-                    <select 
-                      name="refund_status"
-                      required
-                      defaultValue={editingOrder?.refund_status ?? "Not Started"}
-                      className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-black/5 transition-all"
-                    >
-                      {REFUND_STATUSES.map(s => <option key={s} value={s}>{s}</option>)}
-                    </select>
+                    <div className="flex flex-col gap-2">
+                      <select 
+                        value={selectedMediator}
+                        onChange={(e) => setSelectedMediator(e.target.value)}
+                        className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-black/5 transition-all"
+                      >
+                        {MEDIATORS.map(m => <option key={m} value={m}>{m}</option>)}
+                      </select>
+                      {selectedMediator === "Other" && (
+                        <input 
+                          value={customMediator}
+                          onChange={(e) => setCustomMediator(e.target.value)}
+                          className="w-full px-4 py-3 bg-gray-50 border-none rounded-xl focus:ring-2 focus:ring-black/5 transition-all"
+                          placeholder="Enter mediator name"
+                          required
+                        />
+                      )}
+                    </div>
                   </div>
                 </div>
                 <div className="space-y-2">
