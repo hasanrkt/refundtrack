@@ -15,7 +15,10 @@ import {
   Edit2,
   X,
   ChevronRight,
-  ChevronDown
+  ChevronDown,
+  Download,
+  Upload,
+  Database
 } from "lucide-react";
 import { 
   BarChart, 
@@ -68,6 +71,7 @@ export default function App() {
     less_amount: 0,
     refund_amount: 0
   });
+  const [isRestoring, setIsRestoring] = useState(false);
 
   // Fetch orders
   const fetchOrders = async () => {
@@ -83,6 +87,50 @@ export default function App() {
   useEffect(() => {
     fetchOrders();
   }, []);
+
+  const handleBackup = () => {
+    window.location.href = "/api/backup";
+  };
+
+  const handleRestore = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      try {
+        const content = event.target?.result as string;
+        const data = JSON.parse(content);
+        
+        if (!confirm("This will replace all current data with the backup. Are you sure?")) {
+          return;
+        }
+
+        setIsRestoring(true);
+        const response = await fetch("/api/restore", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(data),
+        });
+
+        if (response.ok) {
+          alert("Data restored successfully!");
+          fetchOrders();
+        } else {
+          const err = await response.json();
+          alert(err.error || "Failed to restore data.");
+        }
+      } catch (error) {
+        console.error("Restore error:", error);
+        alert("Invalid backup file format.");
+      } finally {
+        setIsRestoring(false);
+        // Reset input
+        e.target.value = "";
+      }
+    };
+    reader.readAsText(file);
+  };
 
   // Filtered orders
   const filteredOrders = useMemo(() => {
@@ -708,6 +756,68 @@ export default function App() {
                 No orders found matching your criteria.
               </div>
             )}
+            {/* Data Management Section */}
+            <div className="mt-12 bg-white rounded-3xl border border-black/5 shadow-sm p-8">
+              <div className="flex items-center gap-3 mb-6">
+                <div className="p-2 bg-indigo-50 rounded-lg">
+                  <Database className="w-5 h-5 text-indigo-600" />
+                </div>
+                <div>
+                  <h3 className="text-lg font-bold">Data Management</h3>
+                  <p className="text-sm text-gray-500">Backup or restore your tracking data</p>
+                </div>
+              </div>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <button 
+                  onClick={handleBackup}
+                  className="flex items-center justify-between p-6 bg-gray-50 rounded-2xl hover:bg-gray-100 transition-all group"
+                >
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 bg-white rounded-xl shadow-sm group-hover:scale-110 transition-transform">
+                      <Download className="w-6 h-6 text-emerald-600" />
+                    </div>
+                    <div className="text-left">
+                      <p className="font-bold">Backup Data</p>
+                      <p className="text-xs text-gray-500">Download all records as JSON</p>
+                    </div>
+                  </div>
+                  <ChevronRight className="w-5 h-5 text-gray-300" />
+                </button>
+
+                <div className="relative">
+                  <input 
+                    type="file" 
+                    accept=".json"
+                    onChange={handleRestore}
+                    className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
+                    disabled={isRestoring}
+                  />
+                  <div className={cn(
+                    "flex items-center justify-between p-6 bg-gray-50 rounded-2xl transition-all group",
+                    isRestoring ? "opacity-50" : "hover:bg-gray-100"
+                  )}>
+                    <div className="flex items-center gap-4">
+                      <div className="p-3 bg-white rounded-xl shadow-sm group-hover:scale-110 transition-transform">
+                        <Upload className="w-6 h-6 text-indigo-600" />
+                      </div>
+                      <div className="text-left">
+                        <p className="font-bold">{isRestoring ? "Restoring..." : "Restore Data"}</p>
+                        <p className="text-xs text-gray-500">Upload a previous backup file</p>
+                      </div>
+                    </div>
+                    <ChevronRight className="w-5 h-5 text-gray-300" />
+                  </div>
+                </div>
+              </div>
+              
+              <div className="mt-6 p-4 bg-amber-50 rounded-xl border border-amber-100 flex items-start gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5" />
+                <p className="text-xs text-amber-800 leading-relaxed">
+                  <strong>Note:</strong> Data is stored in a local database on the server. To ensure you never lose your records, we recommend downloading a backup periodically, especially before clearing your browser cache or if you notice any environment resets.
+                </p>
+              </div>
+            </div>
           </div>
         )}
       </main>

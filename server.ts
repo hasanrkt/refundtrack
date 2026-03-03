@@ -227,6 +227,61 @@ async function startServer() {
     }
   });
 
+  // Backup and Restore
+  app.get("/api/backup", (req, res) => {
+    try {
+      const orders = db.prepare("SELECT * FROM orders").all();
+      res.setHeader("Content-Type", "application/json");
+      res.setHeader("Content-Disposition", "attachment; filename=refund_tracker_backup.json");
+      res.send(JSON.stringify(orders, null, 2));
+    } catch (error) {
+      res.status(500).json({ error: "Failed to create backup" });
+    }
+  });
+
+  app.post("/api/restore", (req, res) => {
+    const orders = req.body;
+    if (!Array.isArray(orders)) {
+      return res.status(400).json({ error: "Invalid backup format" });
+    }
+
+    try {
+      const deleteStmt = db.prepare("DELETE FROM orders");
+      const insertStmt = db.prepare(`
+        INSERT INTO orders (id, platform, deal_source, order_date, account_name, order_amount, less_amount, refund_amount, mediator_name, refund_form_status, refund_form_date, refund_status, refund_date, notes)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `);
+
+      const transaction = db.transaction((data) => {
+        deleteStmt.run();
+        for (const order of data) {
+          insertStmt.run(
+            order.id,
+            order.platform,
+            order.deal_source || 'Direct',
+            order.order_date,
+            order.account_name,
+            order.order_amount,
+            order.less_amount || 0,
+            order.refund_amount || 0,
+            order.mediator_name || null,
+            order.refund_form_status || 'Pending',
+            order.refund_form_date || null,
+            order.refund_status || 'Not Started',
+            order.refund_date || null,
+            order.notes || null
+          );
+        }
+      });
+
+      transaction(orders);
+      res.json({ success: true, count: orders.length });
+    } catch (error: any) {
+      console.error("Restore Error:", error);
+      res.status(500).json({ error: "Failed to restore backup: " + error.message });
+    }
+  });
+
   // Vite middleware for development
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
