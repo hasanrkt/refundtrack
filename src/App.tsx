@@ -72,6 +72,8 @@ export default function App() {
     refund_amount: 0
   });
   const [isRestoring, setIsRestoring] = useState(false);
+  const [showRecoveryPrompt, setShowRecoveryPrompt] = useState(false);
+  const [localBackupData, setLocalBackupData] = useState<Order[] | null>(null);
 
   // Fetch orders
   const fetchOrders = async () => {
@@ -79,6 +81,18 @@ export default function App() {
       const response = await fetch("/api/orders");
       const data = await response.json();
       setOrders(data);
+      
+      // Check for recovery if server is empty but local storage has data
+      if (data.length === 0) {
+        const saved = localStorage.getItem("refund_tracker_local_sync");
+        if (saved) {
+          const parsed = JSON.parse(saved);
+          if (parsed.length > 0) {
+            setLocalBackupData(parsed);
+            setShowRecoveryPrompt(true);
+          }
+        }
+      }
     } catch (error) {
       console.error("Failed to fetch orders:", error);
     }
@@ -87,6 +101,35 @@ export default function App() {
   useEffect(() => {
     fetchOrders();
   }, []);
+
+  // Sync to local storage for recovery
+  useEffect(() => {
+    if (orders.length > 0) {
+      localStorage.setItem("refund_tracker_local_sync", JSON.stringify(orders));
+    }
+  }, [orders]);
+
+  const handleRecoverData = async () => {
+    if (!localBackupData) return;
+    
+    setIsRestoring(true);
+    try {
+      const response = await fetch("/api/restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(localBackupData),
+      });
+
+      if (response.ok) {
+        setShowRecoveryPrompt(false);
+        fetchOrders();
+      }
+    } catch (error) {
+      console.error("Recovery error:", error);
+    } finally {
+      setIsRestoring(false);
+    }
+  };
 
   const handleBackup = () => {
     window.location.href = "/api/backup";
@@ -392,6 +435,39 @@ export default function App() {
       </nav>
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4 sm:py-8">
+        {showRecoveryPrompt && (
+          <motion.div 
+            initial={{ opacity: 0, y: -20 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mb-8 p-6 bg-indigo-600 rounded-3xl text-white shadow-xl flex flex-col sm:flex-row items-center justify-between gap-6"
+          >
+            <div className="flex items-center gap-4">
+              <div className="p-3 bg-white/20 rounded-2xl">
+                <Database className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-bold text-lg">Found Local Backup!</h3>
+                <p className="text-indigo-100 text-sm">Your server data seems to have reset, but we found {localBackupData?.length} records in your browser.</p>
+              </div>
+            </div>
+            <div className="flex gap-3 w-full sm:w-auto">
+              <button 
+                onClick={() => setShowRecoveryPrompt(false)}
+                className="flex-1 sm:flex-none px-6 py-3 bg-white/10 hover:bg-white/20 rounded-xl font-semibold transition-colors text-sm"
+              >
+                Ignore
+              </button>
+              <button 
+                onClick={handleRecoverData}
+                disabled={isRestoring}
+                className="flex-1 sm:flex-none px-6 py-3 bg-white text-indigo-600 hover:bg-indigo-50 rounded-xl font-bold transition-colors shadow-lg text-sm flex items-center justify-center gap-2"
+              >
+                {isRestoring ? "Restoring..." : "Restore Now"}
+              </button>
+            </div>
+          </motion.div>
+        )}
+
         {activeTab === "dashboard" ? (
           <div className="space-y-6 sm:space-y-8">
             {/* Metrics Grid */}
